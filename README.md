@@ -1,10 +1,10 @@
-# n
+# sqlite-notes
 
 This is a simple SQLite3 note-taking database.  The original was written by 
 [Mike Chirico](mailto:mchirico@users.sourceforge.net) and in a tutorial he wrote, at 
 [sourceforge.net](http://souptonuts.sourceforge.net/readme_sqlite_tutorial.html).
 
-### Prerequites
+### Prerequisites
 - **SQLite3** (included with most modern operating systems) [Download](https://sqlite.org/download.html)
 - **GNU awk** (included with most non-BSD flavours of Unix/Linux) OSX users can install it via [homebrew](https://brew.sh/)
 - **Perl** (included with most modern operating systems)
