@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# n v1.3.27 - December 18, 2015
+# copyright (c) 2004 GPL  Mike Chirico mchirico@users.sourceforge.net
+# version 1.1
+#
+# For Sqlite hints ref:
+# http://souptonuts.sourceforge.net/readme_sqlite_tutorial.html
+#
+#
+# A quick script to create notes during the day
+# BEGIN TRANSACTION;
+#	CREATE TABLE notes (nkey integer primary key,msg text,category text, timeEnter Date);
+#	CREATE TRIGGER 	insert_notes_timeEnter
+#					After insert on notes begin update notes
+#					set timeEnter = Datetime('now','localtime') where rowid=new.rowid; end;
+#  COMMIT;
+#
+_me="${0##*/}"
+AWK=$(which gawk || which awk)
+[ -x $AWK ] || { echo "Unable to locate awk/gawk.  Exiting."; exit 2; }
+# URI escape/unescape
+if [ ! "$(type -t uri_escape)" = "function" ]; then
+	function uri_escape   { echo "$@" | perl -MURI::Escape -wlne 'print uri_escape   $_'; }
+	# function uri_unescape { echo "$@" | perl -MURI::Escape -wlne 'print uri_unescape $_'; }
+fi
+_opts="-batch -list -noheader"
+_dbfolder=$HOME
+_db=${_dbfolder}/notes.db
+[ -z "$HOSTNAME" ] && HOSTNAME="$(/bin/hostname)"
+CATEGORY="$HOSTNAME"
+
+[ -f "${_db}" ] || sqlite3 -batch "${_db}" "BEGIN TRANSACTION;
+	CREATE TABLE notes (nkey integer primary key,msg text,category text, timeEnter Date);
+	CREATE TRIGGER 	insert_notes_timeEnter
+					After insert on notes begin update notes
+					set timeEnter = Datetime('now','localtime') where rowid=new.rowid; end;
+COMMIT;"
+
+while getopts "al:tcf:e:d" opt; do
+	case $opt in
+		a ) sqlite3 $_opts "${_db}" \
+				"select * from notes" \
+				| $AWK -niord '{printf RT?$0chr("0x"substr(RT,2)):$0}' RS=%..
+				exit 1 ;;
+		l ) l=$OPTARG
+			[[ l -eq $OPTARG ]] && l=$OPTARG || l=10
+			sqlite3 $_opts "${_db}" \
+				"select * from notes order by nkey desc limit ${l}" \
+				| $AWK -niord '{printf RT?$0chr("0x"substr(RT,2)):$0}' RS=%..
+				exit 1 ;;
+		t ) sqlite3 $_opts "${_db}" \
+				"select * from notes where timeEnter >= '"$(date "+%Y-%m-%d")"'" \
+				| $AWK -niord '{printf RT?$0chr("0x"substr(RT,2)):$0}' RS=%..
+				exit 2 ;;
+		c ) sqlite3 $_opts "${_db}" \
+				"select category,count(category) from notes group by category" \
+				| $AWK -niord '{printf RT?$0chr("0x"substr(RT,2)):$0}' RS=%..
+				exit 3 ;;
+		f ) sqlite3 $_opts "${_db}" \
+				"select * from notes where msg like '%${OPTARG}%'" \
+				| $AWK -niord '{printf RT?$0chr("0x"substr(RT,2)):$0}' RS=%..
+				exit 3 ;;
+		e ) MYEXE=uri_escape "$(${OPTARG})"
+			#MYEXE=$(echo ${MYEXE}|sed -e s/\'/_/g -e s/\"/__/g)
+			sqlite3 $_opts "${_db}" \
+				"insert into notes (msg, category) values ('${MYEXE}','${CATEGORY}')"
+				exit 3 ;;
+		d ) sqlite3 $_opts "${_db}" \
+				"delete from notes where nkey=(select max(nkey) from notes)"
+				exit 2 ;;
+	esac
+done
+shift $(($OPTIND -1))
+
+if [ "$#" -eq 0 ]; then
+	echo "This command is used to list notes in "
+	echo "a database."
+	echo ""
+	echo "n <option> "
+	echo " -a list all notes"
+	echo " -l <rows> list most recent notes"
+	echo " -t list notes for today"
+	echo " -c list categories"
+	echo " -f <search string> seach for text"
+	echo " -e <cmd> execute command and add to notes"
+	echo " -d delete last entry"
+	exit 2
+fi
+
+if [ "$#" -gt 2 ]; then
+	MSG=uri_escape ${*}
+	#MSG=$(echo ${*}|sed -e s/\'/_/g -e s/\"/__/g)
+	sqlite3 $_opts "${_db}" \
+		"insert into notes (msg, category) values ('${MSG}','${CATEGORY}')"
+else
+	MSG=$(uri_escape ${1})
+	#MSG=$(echo ${1}|sed -e s/\'/_/g -e s/\"/__/g)
+	if [ "$#" == 2 ]; then
+		CATEGORY=$(uri_escape ${2})
+		#CATEGORY=$(echo ${2}|sed -e s/\'/_/g -e s/\"/__/g)
+		sqlite3 $_opts "${_db}" \
+			"insert into notes (msg, category) values ('${MSG}','${CATEGORY}')"
+	else
+		sqlite3 $_opts "${_db}" \
+			"insert into notes (msg, category) values ('${MSG}','${CATEGORY}')"
+		# sqlite3 $_opts "${_db}" "insert into notes (msg) values ('${MSG}')"
+	fi
+fi
+
+# Housekeeping
+unset _me
